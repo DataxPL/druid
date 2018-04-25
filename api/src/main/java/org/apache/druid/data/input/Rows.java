@@ -24,6 +24,7 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Maps;
 import com.google.common.primitives.Longs;
 import org.apache.druid.common.config.NullHandling;
+import org.apache.druid.java.util.common.Pair;
 import org.apache.druid.java.util.common.StringUtils;
 import org.apache.druid.java.util.common.parsers.ParseException;
 
@@ -108,6 +109,8 @@ public class Rows
       catch (Exception e) {
         throw new ParseException(e, "Unable to parse value[%s] for field[%s]", inputValue, name);
       }
+    } else if (inputValue instanceof Pair) {
+      return objectToNumber(name, ((Pair) inputValue).rhs);
     } else {
       throw new ParseException("Unknown type[%s] for field", inputValue.getClass(), inputValue);
     }
