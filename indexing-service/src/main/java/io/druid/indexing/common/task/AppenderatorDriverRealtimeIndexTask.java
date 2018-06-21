@@ -96,6 +96,7 @@ import java.io.File;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Queue;
 import java.util.Random;
 import java.util.Timer;
@@ -312,7 +313,20 @@ public class AppenderatorDriverRealtimeIndexTask extends AbstractTask implements
       // Time to read data!
       while (!gracefullyStopped && firehoseDrainableByClosing && firehose.hasMore()) {
         try {
-          InputRow inputRow = firehose.nextRow();
+          InputRow inputRow;
+          try {
+            inputRow = firehose.nextRow();
+          }
+          catch (NoSuchElementException e) {
+            if (((EventReceiverFirehoseFactory.EventReceiverFirehose) firehose).immediatePublish.getAndSet(false)) {
+              log.info("Immediate Publish requested");
+              publishSegments(driver, publisher, committerSupplier, sequenceName);
+
+              sequenceNumber++;
+              sequenceName = makeSequenceName(getId(), sequenceNumber);
+            }
+            continue;
+          }
 
           if (inputRow == null) {
             log.debug("Discarded null row, considering thrownAway.");
