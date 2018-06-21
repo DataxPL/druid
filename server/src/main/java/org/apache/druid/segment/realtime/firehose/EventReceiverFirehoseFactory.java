@@ -78,6 +78,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -181,6 +182,7 @@ public class EventReceiverFirehoseFactory implements FirehoseFactory<InputRowPar
     private volatile boolean closed = false;
     private final AtomicLong bytesReceived = new AtomicLong(0);
     private final AtomicLong lastBufferAddFailMsgTime = new AtomicLong(0);
+    public final AtomicBoolean immediatePublish = new AtomicBoolean(false);
     private final ConcurrentMap<String, Long> producerSequences = new ConcurrentHashMap<>();
     private final Stopwatch idleWatch = Stopwatch.createUnstarted();
 
@@ -287,6 +289,9 @@ public class EventReceiverFirehoseFactory implements FirehoseFactory<InputRowPar
         try {
           while (nextRow == null) {
             nextRow = buffer.poll(500, TimeUnit.MILLISECONDS);
+            if (nextRow == null && immediatePublish.get()) {
+              return true;
+            }
             if (closed) {
               break;
             }
@@ -386,6 +391,26 @@ public class EventReceiverFirehoseFactory implements FirehoseFactory<InputRowPar
           throw new IllegalStateException("Cannot add events to closed firehose!");
         }
       }
+    }
+
+    @POST
+    @Path("/publish")
+    public Response publish(@Context final HttpServletRequest req)
+    {
+      Access accessResult = AuthorizationUtils.authorizeResourceAction(
+          req,
+          new ResourceAction(
+              new Resource("STATE", ResourceType.STATE),
+              Action.WRITE
+          ),
+          authorizerMapper
+      );
+      if (!accessResult.isAllowed()) {
+        return Response.status(403).build();
+      }
+
+      immediatePublish.set(true);
+      return Response.status(Response.Status.OK).build();
     }
 
     @POST
